@@ -1,2 +1,2 @@
 # Emergency-Admissions-Dashboard
-Emergency Admissions for Dementia, Delirium and MCI diagnoses
+SQL scripts to calculate the number of emergency admissions and readmissions for all, over 65s, Dementia diagnosis, Delirium diagnosis and MCI diagnosis.
