@@ -189,12 +189,7 @@ WHERE ([Admission_Date] between @Period_Start and @Period_End)
 	AND (Admission_Method LIKE '2%')	--Filters for emergency admissions only
 	AND [Patient_Classification] IN ('1','2','5')	-- Filters for: 1 = Ordinary admission, 2 = Day case admission, 5 = Mothers and babies using only delivery facilities  
 
-----------------------------------------End of Step 2------------------------------------------------
-------------------------------------------------------------------------------------------------------
 
----------------------------------------------------------------------------------------------------------
--------------------------------------Step 3---------------------------------------------------------------
---Run Step 3 - this takes the longest to run (~1hr)
 ---------------------------------Unsuppressed Aggregated Table------------------------------------------------
 --This table aggregates the base APCE and base APCS tables at Provider/Sub-ICB/ICB/National levels for the categories Gender, Ethnicity, Admission Source, Discharge Destination, Length of Stay,
 --Primary Diagnosis and Total.
@@ -824,18 +819,18 @@ SELECT
 FROM [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_Dementia_SUS_Dashboard_Unsuppressed]
 
 
-----------------------------------End of Step 3------------------------------------------------------------
+----------------------------------End of Step 2------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------
 
 ----------------------------------------------------------------------------------------------------------
-------------------------------Step 4---------------------------------------------------------------------
---Uncomment Step 4 and execute to drop the temporary tables used in the query, once you are happy the previous steps have run correctly
+------------------------------Step 3---------------------------------------------------------------------
+--Uncomment Step 3 and execute to drop the temporary tables used in the query, once you are happy the previous steps have run correctly
 
 --DROP TABLE [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_Dementia_SUS_Dashboard_APCE]
 --DROP TABLE [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_Dementia_SUS_Dashboard_APCS]
 --DROP TABLE [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_Dementia_SUS_Dashboard_Unsuppressed]
 
-----------------------------------End of Step 4------------------------------------------------------------
+----------------------------------End of Step 3------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------
 
 ----------------------------------End of Script------------------------------------------------------------
