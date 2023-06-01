@@ -186,7 +186,7 @@ WHERE DischargeOrder = 1	--Only includes the latest discharge date
 	AND AdmissionOrder = 1	--Only includes the earliest admission date
 
 ------------------------------------------------Unsuppressed Readmissions Table---------------------------------------------------
---This table aggregates the Readmissions base table at Provider/Sub-ICB/ICB/National levels for the emergency readmission types of Dementia, Age 65+, Delerium, MCI and All
+--This table aggregates the Readmissions base table at Provider/Sub-ICB/ICB/National levels for the emergency readmission types of Dementia, Age 65+, Delirium, MCI and All
 
 --------Provider, Dementia-------------
 INSERT INTO [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_DEM_SUS_Readmissions_Unsuppressed] 
