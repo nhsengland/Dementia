@@ -112,13 +112,16 @@ SELECT
 	,CASE WHEN (a.Der_Diagnosis_All LIKE '%F050%' OR a.Der_Diagnosis_All LIKE '%F058%' OR a.Der_Diagnosis_All LIKE '%F059%') THEN 1 ELSE 0 
 	END as Delirium
 
-	,a.Der_Provider_Code
-	,o2.Organisation_Name AS [Provider Name]
-	,o2.Region_Name as Region_Name_Provider
-	,o1.Organisation_Code AS [Sub ICB Code]
-	,o1.Organisation_Name AS [Sub ICB Name]
-	,o1.STP_Name AS [ICB Name]
-	,o1.Region_Name as Region_Name_Commissioner
+	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS 'Provider_Code'
+	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS 'Provider Name'
+	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS 'Region_Name_Provider'
+	,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS 'Sub ICB Code'
+	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS 'Sub ICB Name'
+	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS 'ICB Code'
+	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS 'ICB Name'
+	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS'Region_Name_Commissioner'
+	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'Region_Code_Commissioner'
+
 INTO [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
 FROM [SUS_APC].[APCE_Core] a
 	LEFT JOIN [UKHD_Data_Dictionary].[Person_Gender_Code_SCD] r1 ON a.Sex=r1.Main_Code_Text AND r1.Effective_To IS NULL
@@ -126,10 +129,16 @@ FROM [SUS_APC].[APCE_Core] a
 	LEFT JOIN [UKHD_Data_Dictionary].[Source_Of_Admission_SCD] r3 ON a.Source_of_Admission = r3.Main_Code_Text AND r3.Effective_To IS NULL AND r3.Valid_From IS NULL
 	LEFT JOIN [UKHD_Data_Dictionary].[Discharge_Destination_SCD] r4 ON a.Discharge_Destination = r4.Main_Code_Text AND r4.Effective_To IS NULL
 	LEFT JOIN [UKHD_ICD10].[Codes_And_Titles_And_MetaData] r5 ON a.[Der_Primary_Diagnosis_Code] = r5.Alt_Code AND r5.[Effective_To] IS NULL
---Three tables joined to get Provider, Sub-ICB, ICB and Region names and Sub-ICB code	
-	LEFT JOIN [MHDInternal].[REFERENCE_CCG_2020_Lookup] c ON a.Commissioner_Code = c.IC_CCG					
-	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] o1 ON c.CCG21 = o1.Organisation_Code 
-	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] o2 ON LEFT(a.Der_Provider_Code,3) = LEFT(o2.Organisation_Code,3) AND o2.Effective_To IS NULL AND LEN(o2.Organisation_Code) = 3
+--Four tables joined to get Provider, Sub-ICB, ICB and Region codes and names
+	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN a.Commissioner_Code LIKE '%00' THEN LEFT(a.Commissioner_Code,3) ELSE a.Commissioner_Code END)= cc.Org_Code COLLATE database_default
+	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.New_Code, (CASE WHEN a.Commissioner_Code LIKE '%00' THEN LEFT(a.Commissioner_Code,3) ELSE a.Commissioner_Code END)) = ch.Organisation_Code COLLATE database_default 
+		AND ch.Effective_To IS NULL
+	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON (CASE WHEN a.Der_Provider_Code LIKE '%00' THEN LEFT(a.Der_Provider_Code,3) ELSE a.Der_Provider_Code END) = ps.Prov_original COLLATE database_default
+	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] ph ON COALESCE(ps.Prov_Successor, (CASE WHEN a.Der_Provider_Code LIKE '%00' THEN LEFT(a.Der_Provider_Code,3) ELSE a.Der_Provider_Code END)) = ph.Organisation_Code COLLATE database_default
+		AND ph.Effective_To IS NULL
+	--Lots of Commissioner and Provider codes in APCE/APCS are 5 character codes ending in 00 which will not match to a code so these are truncated to the 3 character code that will match with the reference tables
+	--For Providers, 5 character codes are used for sites and 3 chracter codes are used for trusts. 5 character codes ending in 00 mean a generic site within a trust so the trust code needs to be used for it to match to the reference tables
+
 WHERE (a.[Admission_Date] BETWEEN @Period_Start AND @Period_End OR a.[Discharge_Date] BETWEEN @Period_Start AND @Period_End) 
 	AND a.Episode_Number = 1 
 	AND (a.Admission_Method LIKE '2%')	--Filters for emergency admissions only
@@ -177,18 +186,28 @@ SELECT
 	,CASE WHEN (b.Der_Diagnosis_All LIKE '%F050%' OR b.Der_Diagnosis_All LIKE '%F058%' OR b.Der_Diagnosis_All LIKE '%F059%') THEN 1 ELSE 0 
 	END as Delirium
 
-	,b.Der_Provider_Code
-	,o2.Organisation_Name AS [Provider Name]
-	,o2.Region_Name as Region_Name_Provider
-	,o1.Organisation_Code AS [Sub ICB Code]
-	,o1.Organisation_Name AS [Sub ICB Name]
-	,o1.STP_Name AS [ICB Name]
-	,o1.Region_Name as Region_Name_Commissioner
+	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS 'Provider_Code'
+	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS 'Provider Name'
+	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS 'Region_Name_Provider'
+	,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS 'Sub ICB Code'
+	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS 'Sub ICB Name'
+	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS 'ICB Code'
+	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS 'ICB Name'
+	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS'Region_Name_Commissioner'
+	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'Region_Code_Commissioner'
+
 INTO [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
 FROM [SUS_APC].[APCS_Core] b
-	LEFT JOIN [MHDInternal].[REFERENCE_CCG_2020_Lookup] c ON b.Commissioner_Code = c.IC_CCG					
-	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] o1 ON c.CCG21 = o1.Organisation_Code 
-	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] o2 ON LEFT(b.Der_Provider_Code,3) = LEFT(o2.Organisation_Code,3) AND o2.Effective_To IS NULL AND LEN(o2.Organisation_Code) = 3
+	--Four tables joined to get Provider, Sub-ICB, ICB and Region codes and names
+	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN b.Commissioner_Code LIKE '%00' THEN LEFT(b.Commissioner_Code,3) ELSE b.Commissioner_Code END)= cc.Org_Code COLLATE database_default
+	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.New_Code, (CASE WHEN b.Commissioner_Code LIKE '%00' THEN LEFT(b.Commissioner_Code,3) ELSE b.Commissioner_Code END)) = ch.Organisation_Code COLLATE database_default 
+		AND ch.Effective_To IS NULL
+	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON (CASE WHEN b.Der_Provider_Code LIKE '%00' THEN LEFT(b.Der_Provider_Code,3) ELSE b.Der_Provider_Code END) = ps.Prov_original COLLATE database_default
+	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] ph ON COALESCE(ps.Prov_Successor, (CASE WHEN b.Der_Provider_Code LIKE '%00' THEN LEFT(b.Der_Provider_Code,3) ELSE b.Der_Provider_Code END)) = ph.Organisation_Code COLLATE database_default
+		AND ph.Effective_To IS NULL
+	--Lots of Commissioner and Provider codes in APCE/APCS are 5 character codes ending in 00 which will not match to a code so these are truncated to the 3 character code that will match with the reference tables
+	--For Providers, 5 character codes are used for sites and 3 chracter codes are used for trusts. 5 character codes ending in 00 mean a generic site within a trust so the trust code needs to be used for it to match to the reference tables
+
 WHERE ([Admission_Date] between @Period_Start and @Period_End) 
 	AND (Admission_Method LIKE '2%')	--Filters for emergency admissions only
 	AND [Patient_Classification] IN ('1','2','5')	-- Filters for: 1 = Ordinary admission, 2 = Day case admission, 5 = Mothers and babies using only delivery facilities  

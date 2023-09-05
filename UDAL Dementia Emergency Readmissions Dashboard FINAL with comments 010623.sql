@@ -137,26 +137,31 @@ SELECT
 	a.[Der_Pseudo_NHS_Number]
 	,CAST(a.[Admission_Date] AS DATE) AS [Admission_Date]
 	, CAST(a.[Discharge_Date] AS DATE) AS [Discharge_Date] 
-	,CASE WHEN o1.Region_Name IS NOT NULL THEN o1.Region_Name ELSE 'Other' 
-	END AS 'Provider Region Name'
-	,CASE WHEN o2.Region_Name IS NOT NULL THEN o2.Region_Name ELSE 'Other' 
-	END AS 'Commissioner Region Name'
-	,CASE WHEN o2.Organisation_Name IS NOT NULL THEN o2.Organisation_Name ELSE 'Other' 
-	END AS 'Sub ICB Name'
-	,CASE WHEN o1.Organisation_Name IS NOT NULL THEN o1.Organisation_Name ELSE 'Other' 
-	END AS 'Provider Name'
-	,CASE WHEN o2.STP_Name IS NOT NULL THEN o2.STP_Name ELSE 'Other' 
-	END AS 'ICB Name'
+	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS 'Provider_Code'
+	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS 'Provider Name'
+	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS 'Provider Region Name'
+	,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS 'Sub ICB Code'
+	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS 'Sub ICB Name'
+	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS 'ICB Code'
+	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS 'ICB Name'
+	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS'Commissioner Region Name'
+	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'Region_Code_Commissioner'
 	,ROW_NUMBER() OVER(PARTITION BY a.[Der_Pseudo_NHS_Number] ORDER BY a.[Admission_Date] ASC) AS AdmissionOrder	--Orders admission dates so the earliest admission date has a value of 1
 	,a.Commissioner_Code
 INTO [MHDInternal].[TEMP_DEM_SUS_Latest_Admission]
 FROM [SUS_APC].[APCS_Core] a
 --Inner join to the previous admission table means only records with a discharge in the previous admission table will be included in this table
 	INNER JOIN [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge] b ON a.[Der_Pseudo_NHS_Number] = b.[Der_Pseudo_NHS_Number]
---Three tables joined to get Provider, Sub-ICB, ICB and Region names
-	LEFT JOIN [MHDInternal].[REFERENCE_CCG_2020_Lookup] c2 ON CASE WHEN a.[Commissioner_Code] LIKE '%00' THEN LEFT(a.[Commissioner_Code],3) ELSE a.[Commissioner_Code] END = c2.IC_CCG
-	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies] o1 ON LEFT(a.Der_Provider_Code,3) = LEFT(o1.Organisation_Code,3) AND o1.Effective_To IS NULL AND LEN(o1.Organisation_Code) = 3
-	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies] o2 ON c2.CCG21 = o2.Organisation_Code 
+--Four tables joined to get Provider, Sub-ICB, ICB and Region codes and names
+	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN a.Commissioner_Code LIKE '%00' THEN LEFT(a.Commissioner_Code,3) ELSE a.Commissioner_Code END)= cc.Org_Code COLLATE database_default
+	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.New_Code, (CASE WHEN a.Commissioner_Code LIKE '%00' THEN LEFT(a.Commissioner_Code,3) ELSE a.Commissioner_Code END)) = ch.Organisation_Code COLLATE database_default 
+		AND ch.Effective_To IS NULL
+	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON (CASE WHEN a.Der_Provider_Code LIKE '%00' THEN LEFT(a.Der_Provider_Code,3) ELSE a.Der_Provider_Code END) = ps.Prov_original COLLATE database_default
+	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] ph ON COALESCE(ps.Prov_Successor, (CASE WHEN a.Der_Provider_Code LIKE '%00' THEN LEFT(a.Der_Provider_Code,3) ELSE a.Der_Provider_Code END)) = ph.Organisation_Code COLLATE database_default
+		AND ph.Effective_To IS NULL
+	--Lots of Commissioner and Provider codes in APCE/APCS are 5 character codes ending in 00 which will not match to a code so these are truncated to the 3 character code that will match with the reference tables
+	--For Providers, 5 character codes are used for sites and 3 chracter codes are used for trusts. 5 character codes ending in 00 mean a generic site within a trust so the trust code needs to be used for it to match to the reference tables
+
 WHERE (a.Admission_Method LIKE '2%')	--Filters for emergency admissions only
 	AND CAST(a.[Admission_Date] AS DATE) BETWEEN @Period_Start2 AND @Period_End2 --Filters for discharges in the latest admission time frame
 	AND (a.[Patient_Classification] = 1)	-- Filters for: 1 = Ordinary admission
