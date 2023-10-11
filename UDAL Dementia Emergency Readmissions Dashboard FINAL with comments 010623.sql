@@ -4,37 +4,40 @@
  ------------------------------------Step 1-------------------------------------------------------------------
 --The last 11 months of data are refreshed each month so the current version of these months are deleted from the table used in the dashboard 
 --and added to an old refresh table to keep as a record. The old refresh data will be removed after a year (i.e. once it is no longer refreshed).
+DECLARE @Period_Start1 DATE
+DECLARE @Period_End1 DATE
 
---Update the months which are deleted into the old refresh table: it should be the 11 months preceding the latest month being added.
---This first step is commented out to avoid being run by mistake, since it involves deletion
---Uncomment Step 1 and execute when refreshing months in financial year for superstats:
+--Period Start1 is the beginning of the month 11 months prior to the latest month in the extract of the data used in the dashboard (as the last 12 months get refreshed each month)
+--Period End1 is the end of the latest month in last month's extract of the data used in the dashboard
+SET @Period_End1 = (SELECT EOMONTH(MAX(Month)) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions])
+SET @Period_Start1 = (SELECT DATEADD(DAY,1, EOMONTH(DATEADD(MONTH,-11,@Period_End1))))
 
---DELETE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions]
---OUTPUT 
---		DELETED.[Month]
---      ,DELETED.[Org_Type]
---      ,DELETED.[Organisation_Name]
---      ,DELETED.[Region Name]
---      ,DELETED.[Readmissions30days]
---      ,DELETED.[Readmissions60days]
---      ,DELETED.[Readmissions90days]
---      ,DELETED.[AdmissionGroup]
---		,DELETED.[SnapshotDate]
---INTO [MHDInternal].[STAGING_DEM_SUS_Emergency_Readmissions_Old_Refresh](
---		[Month]
---      ,[Org_Type]
---      ,[Organisation_Name]
---      ,[Region Name]
---      ,[Readmissions30days]
---      ,[Readmissions60days]
---      ,[Readmissions90days]
---      ,[AdmissionGroup]
---		,[SnapshotDate])
---	  -- Update months which are deleted (see comment above for details)
---WHERE [Month] IN ('April 2023','March 2023','February 2023','January 2023','December 2022','November 2022','October 2022'
---,'September 2022','August 2022','July 2022','June 2022'
---)
+PRINT CAST(@Period_Start1 AS VARCHAR(10)) + ' <-- Period_Start'
+PRINT CAST(@Period_End1 AS VARCHAR(10)) + ' <-- Period_End'
 
+DELETE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions]
+OUTPUT 
+	DELETED.[Month]
+     ,DELETED.[Org_Type]
+     ,DELETED.[Organisation_Name]
+     ,DELETED.[Region Name]
+     ,DELETED.[Readmissions30days]
+     ,DELETED.[Readmissions60days]
+     ,DELETED.[Readmissions90days]
+     ,DELETED.[AdmissionGroup]
+	,DELETED.[SnapshotDate]
+INTO [MHDInternal].[STAGING_DEM_SUS_Emergency_Readmissions_Old_Refresh](
+	[Month]
+     ,[Org_Type]
+     ,[Organisation_Name]
+     ,[Region Name]
+     ,[Readmissions30days]
+     ,[Readmissions60days]
+     ,[Readmissions90days]
+     ,[AdmissionGroup]
+	,[SnapshotDate])
+WHERE [Month] BETWEEN @Period_Start1 AND @Period_End1 --last 11 months
+GO
 -------------------------------------------------End of Step 1------------------------------------------------------------
 --------------------------------------------------------------------------------------------------------------------------
 
@@ -45,7 +48,7 @@
 --Creates a table for the unsuppressed readmissions table needed later
 IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed]
 CREATE TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed] (
-	Month nvarchar(max)
+	Month DATE
 	,[Org_Type] varchar(max)
 	,[Organisation_Name] varchar(max)
 	,[Region Name] varchar(max)
@@ -57,10 +60,10 @@ CREATE TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed] (
 
 --Defines the Offset and Max_Offset used in the loop below so that each month in the last 12 months is cycled through the loop.
 SET NOCOUNT ON
---Offset should always be set to 0 to get the  most recent month available
-DECLARE @Offset INT = 0
+--Offset should always be set to +1 to get the  most recent month available
+DECLARE @Offset INT = +12
 
---Max_Offset should always be set at -11 to refresh the previous 12 months worth of data
+--Max_Offset should always be set at -10 to refresh the previous 12 months worth of data
 DECLARE @Max_Offset INT = -11
 
 ---- Start loop ---------------------------------------------------------------------------------------------------------------------------------
@@ -70,7 +73,7 @@ WHILE (@Offset >= @Max_Offset) BEGIN	--the loop will keep running from the lates
 --This defines the time period for readmissions i.e. an admission following a discharge in the previous discharge time frame, defined below.
 DECLARE @Period_End2 DATE 
 DECLARE @Period_Start2 DATE
-SET @Period_End2 = (SELECT DATEADD(MONTH,@Offset,MAX(EOMONTH([Report_Period_Start_Date]))) FROM [SUS_APC].[APCE_Core])
+SET @Period_End2 = (SELECT DATEADD(MONTH,@Offset,EOMONTH(MAX(Month))) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions])
 SET @Period_Start2 = (SELECT DATEADD(DAY,1,EOMONTH(DATEADD(MONTH,-1,@Period_End2))))
 
 --Previous Discharge Time Frame (90 days prior to the latest admission time frame)
@@ -170,7 +173,7 @@ WHERE (a.Admission_Method LIKE '2%')	--Filters for emergency admissions only
 --This produces a base table  (this a record level table that can be aggregated later) that combines the previous admission and latest admission table. 
 IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_Readmission_Base]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Readmission_Base]
 SELECT 
-	DATENAME(m, @Period_Start2) + ' ' + CAST(DATEPART(yyyy, @Period_Start2) AS varchar) AS Month
+	CAST(DATENAME(m, @Period_Start2) + ' ' + CAST(DATEPART(yyyy, @Period_Start2) AS varchar) AS DATE) AS Month
 	,a.[Der_Pseudo_NHS_Number]
 	,a.Admission_Date AS PreviousAdmission_Date 
 	,a.Discharge_Date AS PreviousDischarge_Date
@@ -516,9 +519,9 @@ FROM [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed]
 
 ----------------------------------------------------------------------------------------------------------
 -------------------------------------Step 3---------------------------------------------------------------
---Uncomment Step 3 and execute to drop the temporary tables used in the query, once you are happy the previous steps have run correctly
+--Execute to drop the temporary tables used in the query, once you are happy the previous steps have run correctly
 
---DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed] 
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed] 
 
 ----------------------------------End of Step 3------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------
