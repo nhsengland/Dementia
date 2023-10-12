@@ -60,11 +60,11 @@ CREATE TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed] (
 
 --Defines the Offset and Max_Offset used in the loop below so that each month in the last 12 months is cycled through the loop.
 SET NOCOUNT ON
---Offset should always be set to +1 to get the  most recent month available
+--Offset should always be set to +12 to get the  most recent month available
 DECLARE @Offset INT = +12
 
---Max_Offset should always be set at -10 to refresh the previous 12 months worth of data
-DECLARE @Max_Offset INT = -11
+--Max_Offset should always be set at +1 to refresh 12 months worth of data
+DECLARE @Max_Offset INT = +1
 
 ---- Start loop ---------------------------------------------------------------------------------------------------------------------------------
 WHILE (@Offset >= @Max_Offset) BEGIN	--the loop will keep running from the latest month (offset=0) until the month 12 months prior (offset=-11)
