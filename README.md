@@ -1,5 +1,5 @@
 # Dementia
-This repository contains the SQL scripts used for the Dementia dashboards hosted in [FutureNHS workspace](https://future.nhs.uk/connect.ti/DCNFutures/view?objectID=33996464).
+This repository contains the SQL scripts used for the Dementia dashboards hosted in [FutureNHS](https://future.nhs.uk/connect.ti/DCNFutures/view?objectID=33996464).
 
 Please note this information is experimental and it is only intended for use for management purposes.
 
