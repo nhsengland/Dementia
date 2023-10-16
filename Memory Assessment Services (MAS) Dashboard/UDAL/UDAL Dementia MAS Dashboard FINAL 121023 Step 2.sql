@@ -29,15 +29,15 @@ SELECT DISTINCT
 	,r.Der_Person_ID
 
 	--Geography
-    ,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS 'Sub-ICBCode'
-	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS 'Sub-ICBName'
-	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS 'ICBCode'
-	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS 'ICBName'
-	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS'RegionNameComm'
-	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'RegionCodeComm'
-	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS 'ProviderCode'
-	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS 'ProviderName'
-	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS 'RegionNameProv'
+    ,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS 'OrgIDComm'
+	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS 'Sub_ICB_Name'
+	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS 'ICB_Code'
+	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS 'ICB_Name'
+	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS'Comm_Region_Name'
+	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'Comm_Region_Code'
+	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS 'OrgIDProv'
+	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS 'Provider_Name'
+	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS 'Prov_Region_Name'
 	
 	,r.ReferralRequestReceivedDate
 	,r.ServDischDate
@@ -173,8 +173,8 @@ IF OBJECT_ID ('[MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]') IS NOT NULL DROP
 	SELECT 
 		Month
 		,CAST(OrgIDProv AS varchar(50)) AS OrgCode
-		,ProviderName AS OrgName
-		,RegionNameProv AS Region 
+		,Provider_Name AS OrgName
+		,Prov_Region_Name AS Region 
 		,'Provider' AS Orgtype
 		,Teamtype
 		,PrimReason
@@ -197,8 +197,8 @@ FROM [MHDInternal].[TEMP_DEM_MAS_Base]
 GROUP BY 
 	Month
 	,OrgIDProv
-	,ProviderName
-	,RegionNameProv
+	,Provider_Name
+	,Prov_Region_Name
 	,Teamtype
 	,PrimReason
 	,LatestDementiaDiagnosisCode
@@ -211,8 +211,8 @@ INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT
 	Month
 	,OrgIDProv AS OrgCode
-	,ProviderName AS OrgName
-	,RegionNameProv AS Region
+	,Provider_Name AS OrgName
+	,Prov_Region_Name AS Region
 	,'Provider' AS Orgtype
 	,Teamtype
 	,PrimReason
@@ -239,8 +239,8 @@ FROM [MHDInternal].[TEMP_DEM_MAS_Base]
 GROUP BY 
 	Month
 	,OrgIDProv
-	,ProviderName
-	,RegionNameProv
+	,Provider_Name
+	,Prov_Region_Name
 	,Teamtype
 	,PrimReason
 	,CASE WHEN AgeServReferRecDate < 65 THEN 'Under65'
@@ -258,8 +258,8 @@ INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
 	,OrgIDProv AS OrgCode
-	,ProviderName AS OrgName
-	,RegionNameProv AS Region
+	,Provider_Name AS OrgName
+	,Prov_Region_Name AS Region
 	,'Provider' AS Orgtype 
 	,[Teamtype]
 	,PrimReason
@@ -284,8 +284,8 @@ FROM [MHDInternal].[TEMP_DEM_MAS_Base]
 GROUP BY 
 	Month
 	,OrgIDProv
-	,ProviderName
-	,RegionNameProv
+	,Provider_Name
+	,Prov_Region_Name
 	,Teamtype
 	,PrimReason
 	,CASE WHEN Gender = '1' THEN 'Males'
@@ -301,8 +301,8 @@ INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
 	,OrgIDProv AS OrgCode
-	,ProviderName AS OrgName
-	,RegionNameProv AS Region
+	,Provider_Name AS OrgName
+	,Prov_Region_Name AS Region
 	,'Provider' AS Orgtype
 	,Teamtype
 	,PrimReason
@@ -330,8 +330,8 @@ FROM [MHDInternal].[TEMP_DEM_MAS_Base]
 GROUP BY 
 	Month
 	,OrgIDProv
-	,[ProviderName]
-	,RegionNameProv
+	,[Provider_Name]
+	,Prov_Region_Name
 	,Teamtype
 	,PrimReason
 	,CASE WHEN EthnicCategory IN ('A','B','C') THEN 'White'
@@ -350,9 +350,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month 
-	,[Sub-ICBCode] AS OrgCode
-	,[Sub-ICBName] AS OrgName
-	,RegionNameComm AS Region
+	,[OrgIDComm] AS OrgCode
+	,[Sub_ICB_Name] AS OrgName
+	,Comm_Region_Name AS Region
 	,'Sub-ICB' AS Orgtype
 	,[Teamtype]
 	,PrimReason
@@ -373,9 +373,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  				
 GROUP BY 
 	Month
-	,[Sub-ICBCode]
-	,[Sub-ICBName]
-	,[RegionNameComm]
+	,[OrgIDComm]
+	,[Sub_ICB_Name]
+	,[Comm_Region_Name]
 	,Teamtype
 	,PrimReason
 	,LatestDementiaDiagnosisCode
@@ -386,9 +386,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
-	,[Sub-ICBCode] AS OrgCode
-	,[Sub-ICBName] AS OrgName
-	,[RegionNameComm] AS Region
+	,[OrgIDComm] AS OrgCode
+	,[Sub_ICB_Name] AS OrgName
+	,[Comm_Region_Name] AS Region
 	,'Sub-ICB' AS Orgtype
 	,[Teamtype] 
 	,PrimReason
@@ -414,9 +414,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  					
 GROUP BY 
 	Month
-	,[Sub-ICBCode]
-	,[Sub-ICBName]
-	,[RegionNameComm]
+	,[OrgIDComm]
+	,[Sub_ICB_Name]
+	,[Comm_Region_Name]
 	,Teamtype
 	,PrimReason
 	,CASE WHEN AgeServReferRecDate < 65 THEN 'Under65'
@@ -432,9 +432,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
-	,[Sub-ICBCode] AS OrgCode
-	,[Sub-ICBName] AS OrgName
-	,RegionNameComm AS Region
+	,[OrgIDComm] AS OrgCode
+	,[Sub_ICB_Name] AS OrgName
+	,Comm_Region_Name AS Region
 	,'Sub-ICB' AS Orgtype 
 	,Teamtype 
 	,PrimReason
@@ -458,9 +458,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  				
 GROUP BY 
 	Month
-	,[Sub-ICBCode]
-	,[Sub-ICBName]
-	,RegionNameComm
+	,[OrgIDComm]
+	,[Sub_ICB_Name]
+	,Comm_Region_Name
 	,Teamtype
 	,PrimReason
 	,CASE WHEN Gender = '1' THEN 'Males'
@@ -474,9 +474,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
-	,[Sub-ICBCode] AS OrgCode
-	,[Sub-ICBName] AS OrgName
-	,RegionNameComm AS Region
+	,[OrgIDComm] AS OrgCode
+	,[Sub_ICB_Name] AS OrgName
+	,Comm_Region_Name AS Region
 	,'Sub-ICB' AS Orgtype
 	,Teamtype
 	,PrimReason
@@ -503,9 +503,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  				
 GROUP BY 
 	Month
-	,[Sub-ICBCode]
-	,[Sub-ICBName]
-	,RegionNameComm
+	,[OrgIDComm]
+	,[Sub_ICB_Name]
+	,Comm_Region_Name
 	,Teamtype 
 	,PrimReason
 	,CASE WHEN EthnicCategory IN ('A','B','C') THEN 'White'
@@ -682,9 +682,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month 
-	,ICBCode AS OrgCode
-	,ICBName AS OrgName
-	,RegionNameComm AS Region
+	,ICB_Code AS OrgCode
+	,ICB_Name AS OrgName
+	,Comm_Region_Name AS Region
 	,'ICB' AS Orgtype
 	,Teamtype
 	,PrimReason
@@ -705,9 +705,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  			
 GROUP BY 
 	Month
-	,ICBCode
-	,ICBName
-	,RegionNameComm
+	,ICB_Code
+	,ICB_Name
+	,Comm_Region_Name
 	,Teamtype
 	,PrimReason
 	,LatestDementiaDiagnosisCode
@@ -718,9 +718,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
-	,ICBCode AS OrgCode
-	,ICBName AS OrgName
-	,RegionNameComm AS Region
+	,ICB_Code AS OrgCode
+	,ICB_Name AS OrgName
+	,Comm_Region_Name AS Region
 	,'ICB' AS Orgtype
 	,Teamtype 
 	,PrimReason
@@ -746,9 +746,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  				
 GROUP BY 
 	Month
-	,ICBCode
-	,ICBName
-	,RegionNameComm
+	,ICB_Code
+	,ICB_Name
+	,Comm_Region_Name
 	,Teamtype 
 	,PrimReason
 	,CASE WHEN AgeServReferRecDate < 65 THEN 'Under65'
@@ -764,9 +764,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT 
 	Month
-	,ICBCode AS OrgCode
-	,ICBName AS OrgName
-	,RegionNameComm AS Region
+	,ICB_Code AS OrgCode
+	,ICB_Name AS OrgName
+	,Comm_Region_Name AS Region
 	,'ICB' AS Orgtype 
 	,Teamtype
 	,PrimReason
@@ -790,9 +790,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  				
 GROUP BY 
 	Month
-	,ICBCode
-	,ICBName
-	,RegionNameComm
+	,ICB_Code
+	,ICB_Name
+	,Comm_Region_Name
 	,Teamtype
 	,PrimReason
 	,CASE WHEN Gender = '1' THEN 'Males'
@@ -806,9 +806,9 @@ GROUP BY
 INSERT INTO [MHDInternal].[DASHBOARD_DEM_MAS_Main_Metrics]
 SELECT
 	Month 
-	,ICBCode AS OrgCode
-	,ICBName AS OrgName
-	,RegionNameComm AS Region
+	,ICB_Code AS OrgCode
+	,ICB_Name AS OrgName
+	,Comm_Region_Name AS Region
 	,'ICB' AS Orgtype
 	,Teamtype
 	,PrimReason
@@ -835,9 +835,9 @@ SELECT
 FROM [MHDInternal].[TEMP_DEM_MAS_Base]  					
 GROUP BY 
 	Month
-	,ICBCode
-	,ICBName
-	,RegionNameComm
+	,ICB_Code
+	,ICB_Name
+	,Comm_Region_Name
 	,Teamtype
 	,PrimReason
 	,CASE WHEN EthnicCategory IN ('A','B','C') THEN 'White'
