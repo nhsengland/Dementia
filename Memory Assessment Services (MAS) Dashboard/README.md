@@ -1,6 +1,6 @@
 # Memory Assessment Services (MAS) Dashboard
 
-This folder contains the SQL scripts for the [MAS Dashboard](https://future.nhs.uk/DCNFutures/view?objectID=40667984)
+This folder contains the SQL scripts for the [MAS Dashboard](https://future.nhs.uk/DCNFutures/view?objectID=40667984).
 
 Please note this information is experimental and it is only intended for use for management purposes.
 
