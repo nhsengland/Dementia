@@ -5,64 +5,64 @@
 --The last 11 months of data are refreshed each month so the current version of these months are deleted from the table used in the dashboard 
 --and added to an old refresh table to keep as a record. The old refresh data will be removed after a year (i.e. once it is no longer refreshed).
 
---Update the months which are deleted into the old refresh table: it should be the 11 months preceding the latest month being added.
---This first step is commented out to avoid being run by mistake, since it involves deletion
---Uncomment Step 1 and execute when refreshing months in financial year for superstats:
+DECLARE @Period_Start1 DATE
+DECLARE @Period_End1 DATE
 
---DELETE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
---OUTPUT 
---		DELETED.[Month]
---      ,DELETED.[GroupType]
---      ,DELETED.[RegionCode]
---      ,DELETED.[GeographyName]
---      ,DELETED.[Category]
---      ,DELETED.[Variable]
---      ,DELETED.[Emergency Admissions]
---      ,DELETED.[Emergency Admissions - Aged 65 Years and Over]
---      ,DELETED.[Emergency Admissions - Dementia Diagnosis]
---      ,DELETED.[Emergency Admissions - Delirium Diagnosis]
---      ,DELETED.[Emergency Admissions - MCI Diagnosis]
---      ,DELETED.[Primary Diagnosis Chapter]
---		,DELETED.[SnapshotDate]
---INTO [MHDInternal].[STAGING_DEM_SUS_Emergency_Admissions_Old_Refresh](
---		[Month]
---      ,[GroupType]
---      ,[RegionCode]
---      ,[GeographyName]
---      ,[Category]
---      ,[Variable]
---      ,[Emergency Admissions]
---      ,[Emergency Admissions - Aged 65 Years and Over]
---      ,[Emergency Admissions - Dementia Diagnosis]
---      ,[Emergency Admissions - Delirium Diagnosis]
---      ,[Emergency Admissions - MCI Diagnosis]
---      ,[Primary Diagnosis Chapter]
---		,[SnapshotDate])
---	  -- Update months which are deleted (see comment above for details)
---WHERE [Month]IN ('2023-04-01 00:00:00.000','2023-03-01 00:00:00.000','2023-02-01 00:00:00.000','2023-01-01 00:00:00.000', '2022-12-01 00:00:00.000','2022-11-01 00:00:00.000'
---,'2022-10-01 00:00:00.000','2022-09-01 00:00:00.000','2022-08-01 00:00:00.000','2022-07-01 00:00:00.000','2022-06-01 00:00:00.000'
---)
+--Period Start1 is the beginning of the month 11 months prior to the latest month in the extract of the data used in the dashboard (as the last 12 months get refreshed each month)
+--Period End1 is the end of the latest month in last month's extract of the data used in the dashboard
+SET @Period_End1 = (SELECT EOMONTH(MAX(Month)) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions])
+SET @Period_Start1 = (SELECT DATEADD(DAY,1, EOMONTH(DATEADD(MONTH,-11,@Period_End1))))
+
+PRINT CAST(@Period_Start1 AS VARCHAR(10)) + ' <-- Period_Start'
+PRINT CAST(@Period_End1 AS VARCHAR(10)) + ' <-- Period_End'
+
+DELETE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
+OUTPUT 
+	DELETED.[Month]
+     ,DELETED.[GroupType]
+     ,DELETED.[RegionCode]
+     ,DELETED.[GeographyName]
+     ,DELETED.[Category]
+     ,DELETED.[Variable]
+     ,DELETED.[Emergency Admissions]
+     ,DELETED.[Emergency Admissions - Aged 65 Years and Over]
+     ,DELETED.[Emergency Admissions - Dementia Diagnosis]
+     ,DELETED.[Emergency Admissions - Delirium Diagnosis]
+     ,DELETED.[Emergency Admissions - MCI Diagnosis]
+     ,DELETED.[Primary Diagnosis Chapter]
+	,DELETED.[SnapshotDate]
+INTO [MHDInternal].[STAGING_DEM_SUS_Emergency_Admissions_Old_Refresh](
+	[Month]
+     ,[GroupType]
+     ,[RegionCode]
+     ,[GeographyName]
+     ,[Category]
+     ,[Variable]
+     ,[Emergency Admissions]
+     ,[Emergency Admissions - Aged 65 Years and Over]
+     ,[Emergency Admissions - Dementia Diagnosis]
+     ,[Emergency Admissions - Delirium Diagnosis]
+     ,[Emergency Admissions - MCI Diagnosis]
+     ,[Primary Diagnosis Chapter]
+	,[SnapshotDate])
+WHERE [Month] BETWEEN @Period_Start1 AND @Period_End1 --last 11 months
+GO
 -------------------------------------------------End of Step 1------------------------------------------------------------
 --------------------------------------------------------------------------------------------------------------------------
 
 --------------------------------------------------------------------------------------------------------------------------
 ---------------------------------------------------Step 2-----------------------------------------------------------------
 --Run Step 2
-
-
---Offset defines which month is run (0 would be the latest available)
-DECLARE @Offset int = 0
-
 DECLARE @Period_Start DATE
 DECLARE @Period_End DATE
 
 --Period Start is the beginning of the month 12 months prior to the latest month (meaning the last 12 months get refreshed each month)
 --Period End is the end of the latest month
-SET @Period_End = (SELECT DATEADD(MONTH,@Offset,MAX(EOMONTH([Report_Period_Start_Date]))) FROM [SUS_APC].[APCE_Core])
+SET @Period_End = (SELECT DATEADD(MONTH,+12,EOMONTH(MAX(Month))) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions])
 SET @Period_Start = (SELECT DATEADD(DAY,1, EOMONTH(DATEADD(MONTH,-12,@Period_End))))
 
 PRINT CAST(@Period_Start AS VARCHAR(10)) + ' <-- Period_Start'
-PRINT CAST(@Period_End AS VARCHAR(10)) + ' <-- Period_end'
+PRINT CAST(@Period_End AS VARCHAR(10)) + ' <-- Period_End'
 
 ----------------------------------------------APCE Base Table-----------------------------------------------------------------------------------------------------
 --Creates a base table (this a record level table that can be aggregated later) of APCE data for the 12 month period defined by @Period_Start and @Period_End above.
@@ -840,18 +840,18 @@ SELECT
 	,GETDATE() AS SnapshotDate
 --INTO [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
 FROM [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
+GO
 
 ----------------------------------End of Step 2------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------
 
 ----------------------------------------------------------------------------------------------------------
 ------------------------------Step 3---------------------------------------------------------------------
---Uncomment Step 3 and execute to drop the temporary tables used in the query, once you are happy the previous steps have run correctly
+--Execute to drop the temporary tables used in the query, once you are happy the previous steps have run correctly
 
---DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
---DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
---DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
 
 ----------------------------------End of Step 3------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------
