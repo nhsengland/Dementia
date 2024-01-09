@@ -132,8 +132,8 @@ GO
  IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_MAS_DIAG_Ranking]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_MAS_DIAG_Ranking]
 SELECT
 	*
-	,ROW_NUMBER() OVER(PARTITION BY [UniqServReqID],[Der_Person_ID] ORDER BY [CodedDiagTimestamp] ASC, DiagnosisArea DESC ) AS RowIDEarliest	--There are instances of more than one primary diagnosis with the same timestamp. In this case Dementia is used over MCI.
-	,ROW_NUMBER() OVER(PARTITION BY [UniqServReqID],[Der_Person_ID] ORDER BY [CodedDiagTimestamp] DESC, DiagnosisArea ASC) AS RowIDLatest		--There are instances of more than one primary diagnosis with the same timestamp. In this case Dementia is used over MCI.
+	,ROW_NUMBER() OVER(PARTITION BY [UniqServReqID],[Der_Person_ID] ORDER BY [CodedDiagTimestamp] ASC, DiagnosisArea DESC ) AS RowIDEarliest	--There are instances of more than one primary diagnosis with the same timestamp. In this case MCI is used over Dementia as the latest diagnosis is ordered alphabetically.
+	,ROW_NUMBER() OVER(PARTITION BY [UniqServReqID],[Der_Person_ID] ORDER BY [CodedDiagTimestamp] DESC, DiagnosisArea ASC) AS RowIDLatest		--There are instances of more than one primary diagnosis with the same timestamp. In this case Dementia is used over MCI as ordered alphabetically.
 INTO [MHDInternal].[TEMP_DEM_MAS_DIAG_Ranking]
 FROM [MHDInternal].[TEMP_DEM_MAS_DIAG]
 GO
