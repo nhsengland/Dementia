@@ -13,9 +13,9 @@ DECLARE @PeriodStart2 DATE
 
 SET @PeriodStart2 = '2021-04-01' 
 
-------For refreshing months each superstats this will always be -1 to get the latest refreshed month available
-SET @PeriodStart = (SELECT DATEADD(MONTH,-1,MAX([ReportingPeriodStartDate])) FROM [MESH_MHSDS].[MHSDS_SubmissionFlags]) 
-SET @PeriodEnd = (SELECT eomonth(DATEADD(MONTH,-1,MAX([ReportingPeriodEndDate]))) FROM [MESH_MHSDS].[MHSDS_SubmissionFlags])
+------For refreshing months each superstats this will always be 0 to get the latest refreshed month available
+SET @PeriodStart = (SELECT DATEADD(MONTH,0,MAX([ReportingPeriodStartDate])) FROM [MESH_MHSDS].[MHSDS_SubmissionFlags]) 
+SET @PeriodEnd = (SELECT eomonth(DATEADD(MONTH,0,MAX([ReportingPeriodEndDate]))) FROM [MESH_MHSDS].[MHSDS_SubmissionFlags])
 SET DATEFIRST 1
 
 PRINT @PeriodStart
