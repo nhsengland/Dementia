@@ -2,16 +2,19 @@
 		open referrals, open referrals with no contact, open referrals with a care plan, new referrals, discharges, 
 		wait times from referral to first contact, and wait times from referral to diagnosis ******/
 
-------------------------------------------------Step 3 and 4--------------------------------------------------------------
+------------------------------------------------Step 2 and 3--------------------------------------------------------------
+-- DELETE MAX(Month) -----------------------------------------------------------------------
+DELETE FROM [NHSE_Sandbox_MentalHealth].[dbo].[DEM_MAS_Wait_Times_Dashboard]
+WHERE [Month] = (SELECT MAX([Month]) FROM [NHSE_Sandbox_MentalHealth].[dbo].[DEM_MAS_Wait_Times_Dashboard])
 
+DELETE FROM [NHSE_Sandbox_MentalHealth].[dbo].[DEM_MAS_Main_Metrics_Dashboard]
+WHERE [Month] = (SELECT MAX([Month]) FROM [NHSE_Sandbox_MentalHealth].[dbo].[DEM_MAS_Main_Metrics_Dashboard])
+
+GO
 
 USE [NHSE_MHSDS]
-
 DECLARE @PeriodStart DATE
-DECLARE @PeriodEnd DATE 
-DECLARE @PeriodStart2 DATE
-
-SET @PeriodStart2 = '2021-04-01' 
+DECLARE @PeriodEnd DATE
 
 ------For refreshing months each superstats this will always be 0 to get the latest refreshed month available
 SET @PeriodStart = (SELECT DATEADD(MONTH,0,MAX([ReportingPeriodStartDate])) FROM [dbo].[MHSDS_SubmissionFlags])
@@ -130,9 +133,10 @@ FROM [NHSE_MHSDS].[dbo].[MHS101Referral] r
 		LEFT JOIN [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_DEM_MAS_DIAG_Ranking] e ON s.UniqServReqID = e.UniqServReqID AND s.Der_Person_ID = e.Der_Person_ID and e.RowIDEarliest=1
 		LEFT JOIN [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_DEM_MAS_DIAG_Ranking] l ON s.UniqServReqID = l.UniqServReqID AND s.Der_Person_ID = l.Der_Person_ID and l.RowIDLatest=1
 WHERE 
-sf.ReportingPeriodStartDate IS NOT NULL and sf.[ReportingPeriodStartDate] BETWEEN @PeriodStart2 AND @PeriodStart
-GO
+sf.ReportingPeriodStartDate IS NOT NULL 
+AND sf.[ReportingPeriodStartDate] BETWEEN DATEADD(MONTH, -1, @PeriodStart) AND @PeriodStart --For monthly refresh this should be set to -1 to define the second latest month (the latest two months are run each month)
 
+GO
 
 --------------------------------------------------------Wait Times Table---------------------------------------------------------
 ----Table used in tableau to produce boxplots of wait times and the graphs for the proportions of wait times:
@@ -846,9 +850,9 @@ GROUP BY
 	,LatestDementiaDiagnosisCode
 	,LatestDiagnosisArea
 	,CASE WHEN [LatestDementiaDiagnosisCode] IS NOT NULL THEN 1 ELSE 0 END
--------------------------------------------------End of Step 3----------------------------------------------------------------------------------
+-------------------------------------------------End of Step 2----------------------------------------------------------------------------------
 ------------------------------------------------------------------------------------------------------------------------------------------------
--------------------------------------------------------Step 4------------------------------------------------------------------------------------
+-------------------------------------------------------Step 3------------------------------------------------------------------------------------
 
 --Drops temporary tables used in the query
 --DROP TABLE [NHSE_Sandbox_MentalHealth].[dbo].[TEMP_DEM_MAS_DIAG]
@@ -858,7 +862,7 @@ GROUP BY
 
 
 
----------------------------------------------End of Step 4--------------------------------------------------------------------------
+---------------------------------------------End of Step 3--------------------------------------------------------------------------
 ---------------------------------------------------------End of Script--------------------------------------------------------------
 -----------------------------------------------------------------------------------------------------------------------------
 
