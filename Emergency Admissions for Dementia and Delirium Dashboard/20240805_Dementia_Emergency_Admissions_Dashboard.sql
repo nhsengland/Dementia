@@ -197,7 +197,7 @@ SELECT
 	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'Region_Code_Commissioner'
 
 INTO [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
-FROM [SUS_APC].[APCS_Core] b
+FROM [Reporting_MESH_APC].[APCS_Core_Daily_Snapshot] b
 	--Four tables joined to get Provider, Sub-ICB, ICB and Region codes and names
 	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN b.Commissioner_Code LIKE '%00' THEN LEFT(b.Commissioner_Code,3) ELSE b.Commissioner_Code END)= cc.Org_Code COLLATE database_default
 	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.New_Code, (CASE WHEN b.Commissioner_Code LIKE '%00' THEN LEFT(b.Commissioner_Code,3) ELSE b.Commissioner_Code END)) = ch.Organisation_Code COLLATE database_default 
