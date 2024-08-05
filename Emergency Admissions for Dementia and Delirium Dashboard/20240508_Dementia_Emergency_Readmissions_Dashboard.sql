@@ -127,7 +127,7 @@ SELECT
 	,CASE WHEN [Age_At_Start_of_Spell_SUS] >= 65 THEN 1 ELSE 0 
 	END AS Age65
 INTO [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge]
-FROM [SUS_APC].[APCS_Core] a
+FROM [Reporting_MESH_APC].[APCS_Core_Daily_Snapshot] a
 WHERE Admission_Method LIKE '2%'	--Filters for emergency admissions only
 	AND CAST(Discharge_Date AS DATE) BETWEEN @Period_Start AND @Period_End	--Filters for discharges in the previous admission time frame
 	AND [Der_Pseudo_NHS_Number] IS NOT NULL
@@ -152,7 +152,7 @@ SELECT
 	,ROW_NUMBER() OVER(PARTITION BY a.[Der_Pseudo_NHS_Number] ORDER BY a.[Admission_Date] ASC) AS AdmissionOrder	--Orders admission dates so the earliest admission date has a value of 1
 	,a.Commissioner_Code
 INTO [MHDInternal].[TEMP_DEM_SUS_Latest_Admission]
-FROM [SUS_APC].[APCS_Core] a
+FROM [Reporting_MESH_APC].[APCS_Core_Daily_Snapshot] a
 --Inner join to the previous admission table means only records with a discharge in the previous admission table will be included in this table
 	INNER JOIN [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge] b ON a.[Der_Pseudo_NHS_Number] = b.[Der_Pseudo_NHS_Number]
 --Four tables joined to get Provider, Sub-ICB, ICB and Region codes and names
