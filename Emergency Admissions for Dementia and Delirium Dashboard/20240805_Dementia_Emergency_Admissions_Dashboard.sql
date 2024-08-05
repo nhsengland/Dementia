@@ -123,7 +123,7 @@ SELECT
 	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS 'Region_Code_Commissioner'
 
 INTO [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
-FROM [SUS_APC].[APCE_Core] a
+FROM [Reporting_MESH_APC].[APCE_Core_Daily_Snapshot] a
 	LEFT JOIN [UKHD_Data_Dictionary].[Person_Gender_Code_SCD] r1 ON a.Sex=r1.Main_Code_Text AND r1.Effective_To IS NULL
 	LEFT JOIN [UKHD_Data_Dictionary].[Ethnic_Category_Code_SCD] r2 ON a.Ethnic_Group = r2.Main_Code_Text AND r2.Effective_To IS NULL
 	LEFT JOIN [UKHD_Data_Dictionary].[Source_Of_Admission_SCD] r3 ON a.Source_of_Admission = r3.Main_Code_Text AND r3.Effective_To IS NULL AND r3.Valid_From IS NULL
