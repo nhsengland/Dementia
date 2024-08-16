@@ -6,7 +6,7 @@
 
 /* 
 
--- Current values covering the last 11 months are deleted from the dashboard table and added to an old refresh table to keep AS a record. 
+-- Current values covering the last 11 months are deleted from the dashboard table and added to an old refresh table to keep as a record. 
 -- The old refresh data will be removed after one year (i.e. once it is no longer refreshed).
 
 -- @delete_period_start is the beginning of the month 11 months prior to the latest month in the dashboard extract (to include the last 12 months in the refresh)
