@@ -16,7 +16,7 @@
 
 --------------------------------------------------------------------------------------------------------------------------------------------------------
 DECLARE @delete_period_end DATE = (SELECT EOMONTH(MAX([Month])) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions])
-DECLARE @delete_period_start DATE = (SELECT DATEADD(DAY,1, EOMONTH(DATEADD(MONTH,-11,@delete_period_end))))
+DECLARE @delete_period_start DATE = (SELECT DATEADD(DAY,1,EOMONTH(DATEADD(MONTH,-11,@delete_period_end))))
 
 PRINT CHAR(13) + 'Delete values between ' + CAST(@delete_period_start AS VARCHAR(10)) + ' and ' + CAST(@delete_period_end AS VARCHAR(10)) 
 --------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -54,7 +54,7 @@ GO
 
 -- Step 2---------------------------------------------------------------------------------------------------------------------
 
--- Creates a table for the unsuppressed readmissions table needed later
+-- Creates a table for the unsuppressed readmissions needed later
 
 IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Readmissions_Unsuppressed]
 
@@ -85,7 +85,7 @@ WHILE (@Offset >= @Max_Offset) BEGIN
 -- Latest Admission Time Frame
 -- This defines the time period for readmissions i.e. an admission following a discharge in the previous discharge time frame, defined below.
  
-DECLARE @admissions_period_end DATE = (SELECT DATEADD(MONTH,@Offset,EOMONTH(MAX([Month]))) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions])
+DECLARE @admissions_period_end DATE = (SELECT EOMONTH(DATEADD(MONTH,@Offset,MAX([Month]))) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Readmissions])
 DECLARE @admissions_period_start DATE = (SELECT DATEADD(DAY,1,EOMONTH(DATEADD(MONTH,-1,@admissions_period_end))))
 
 -- Previous Discharge Time Frame (90 days prior to the latest admission time frame)
@@ -139,7 +139,7 @@ SELECT
 
 INTO [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge]
 
-FROM [Reporting_MESH_APC].[APCS_Core_Daily_Snapshot] a
+FROM [Reporting_MESH_APC].[APCS_Core_Union] a
 
 WHERE 
 	Admission_Method LIKE '2%'	-- emergency admissions only
@@ -173,7 +173,7 @@ SELECT
 INTO [MHDInternal].[TEMP_DEM_SUS_Latest_Admission]
 
 FROM 
-	[Reporting_MESH_APC].[APCS_Core_Daily_Snapshot] a
+	[Reporting_MESH_APC].[APCS_Core_Union] a
 	--Inner join to the previous admission table means only records with a discharge in the previous admission table will be included in this table
 	INNER JOIN [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge] b ON a.[Der_Pseudo_NHS_Number] = b.[Der_Pseudo_NHS_Number]
 	--------------------------------------------------------------
@@ -621,7 +621,7 @@ DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Readmission_Base]
 END; -- End loop ----------------------------------------------------------------------------------------------------
 ---------------------------------------------------------------------------------------------------------------------
 
-----------------Emergency Readmissions Output Table------------------------------------------------------------------
+-- Emergency Readmissions Output Table ------------------------------------------------------------------------------
 
 -- Final output table used in the dashboard containing suppressed values (where less than 7)
 
