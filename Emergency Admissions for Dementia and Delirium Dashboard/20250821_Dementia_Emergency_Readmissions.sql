@@ -139,7 +139,7 @@ SELECT
 
 INTO [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge]
 
-FROM [Reporting_MESH_APC].[APCS_Core_Union] a
+FROM [Reporting_MESH_APC].[APCS_Core_Monthly_Snapshot] a
 
 WHERE 
 	Admission_Method LIKE '2%'	-- emergency admissions only
@@ -173,7 +173,7 @@ SELECT
 INTO [MHDInternal].[TEMP_DEM_SUS_Latest_Admission]
 
 FROM 
-	[Reporting_MESH_APC].[APCS_Core_Union] a
+	[Reporting_MESH_APC].[APCS_Core_Monthly_Snapshot] a
 	--Inner join to the previous admission table means only records with a discharge in the previous admission table will be included in this table
 	INNER JOIN [MHDInternal].[TEMP_DEM_SUS_Previous_Discharge] b ON a.[Der_Pseudo_NHS_Number] = b.[Der_Pseudo_NHS_Number]
 	--------------------------------------------------------------
