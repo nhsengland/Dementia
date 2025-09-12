@@ -128,7 +128,7 @@ SELECT
 INTO [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
 
 FROM 
-	[Reporting_MESH_APC].[APCE_Core_Union] a
+	[Reporting_MESH_APC].[APCE_Core_Monthly_Snapshot] a
 	--------------------------------------------------
 	LEFT JOIN [UKHD_Data_Dictionary].[Person_Gender_Code_SCD] r1 ON a.[Sex] = r1.[Main_Code_Text] AND r1.[Effective_To] IS NULL
 	LEFT JOIN [UKHD_Data_Dictionary].[Ethnic_Category_Code_SCD] r2 ON a.[Ethnic_Group] = r2.[Main_Code_Text] AND r2.[Effective_To] IS NULL
@@ -206,7 +206,7 @@ SELECT
 INTO [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
 
 FROM 
-	[Reporting_MESH_APC].[APCS_Core_Union] b
+	[Reporting_MESH_APC].[APCS_Core_Monthly_Snapshot] b
 	--------------------------------------------------
 	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN b.[Commissioner_Code] LIKE '%00' THEN LEFT(b.[Commissioner_Code],3) ELSE b.[Commissioner_Code] END) = cc.[Org_Code] COLLATE database_default
 	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.[New_Code], (CASE WHEN b.[Commissioner_Code] LIKE '%00' THEN LEFT(b.[Commissioner_Code],3) ELSE b.[Commissioner_Code] END)) = ch.[Organisation_Code] COLLATE database_default AND ch.[Effective_To] IS NULL
