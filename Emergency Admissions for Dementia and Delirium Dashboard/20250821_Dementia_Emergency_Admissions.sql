@@ -1,9 +1,7 @@
-
 /* - Emergency Admissions for Dementia and Delirium Dashboard -------------------------------------------------
    - Emergency Admissions script --------------------------------------------------------------------------- */
 
--- Step 1 -----------------------------------------------------------------------------------------------------------------------------------
-
+-- Step 1 -------------------------------------------------------------------------------------------------------
 /* 
 
 -- Current values covering the last 11 months are deleted from the dashboard table and added to an old refresh table to keep as a record. 
@@ -12,16 +10,15 @@
 -- @delete_period_start is the beginning of the month 11 months prior to the latest month in the dashboard extract (to include the last 12 months in the refresh)
 -- @delete_period_end is the end of the latest month in last month's dashboard extract 
 
-*/
+*/ -------------------------------------------------------------------------------------------------------------------
 
---------------------------------------------------------------------------------------------------------------------------------------------------------
-DECLARE @delete_period_end DATE = (SELECT EOMONTH(MAX(Month)) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions])
+DECLARE @delete_period_end DATE = (SELECT EOMONTH(MAX(Month)) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions_New])
 DECLARE @delete_period_start DATE = (SELECT DATEADD(DAY,1,EOMONTH(DATEADD(MONTH,-11,@delete_period_end))))
 
 PRINT CHAR(13) + 'Delete values between ' + CAST(@delete_period_start AS VARCHAR(10)) + ' and ' + CAST(@delete_period_end AS VARCHAR(10)) 
---------------------------------------------------------------------------------------------------------------------------------------------------------
+-----------------------------------------------------------------------------------------------------------------------------------------
 
-DELETE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
+DELETE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions_New]
 
 OUTPUT 
 	
@@ -61,19 +58,16 @@ GO -- End of Step 1 ------------------------------------------------------------
 
 -- Step 2 -------------------------------------------------------------------------------------------------------------------------------------------------------
 
--- Period Start is the beginning of the month 12 months prior to the latest month (the last 12 months get refreshed each month)
--- Period End is the end of the latest month
+-- @admission_period_start is the beginning of the month 12 months prior to the latest month (the last 12 months get refreshed each month)
+-- @admission_period_end is the end of the latest month
 
-DECLARE @admission_period_end DATE = (SELECT EOMONTH(DATEADD(MONTH,+12,MAX(Month))) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions])
+DECLARE @admission_period_end DATE = (SELECT EOMONTH(DATEADD(MONTH,+12,MAX(Month))) FROM [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions_New])
 DECLARE @admission_period_start DATE = (SELECT DATEADD(DAY,1, EOMONTH(DATEADD(MONTH,-12,@admission_period_end))))
 
 PRINT CHAR(13) + 'Insert values between ' + CAST(@admission_period_start AS VARCHAR(10)) + ' and ' + CAST(@admission_period_end AS VARCHAR(10)) -- last 12 months
 
--- APCE Base Table ----------------------------------------------------------------------------------------------------------------------------------------------
-
--- Creates a base table (a record level table to be aggregated later) of APCE data for the 12 month period defined by @admission_period_start and @admission_period_end above.
-
-IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_APCE_Base]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
+IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_APCE_Base]') IS NOT NULL 
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
 
 SELECT 
 	a.[APCE_Ident]
@@ -118,12 +112,10 @@ SELECT
 	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS [Provider_Code]
 	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS [Provider Name]
 	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS [Region_Name_Provider]
-	,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS [Sub ICB Code]
-	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS [Sub ICB Name]
-	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS [ICB Code]
-	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS [ICB Name]
-	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS [Region_Name_Commissioner]
-	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS [Region_Code_Commissioner]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other ' ELSE c.Organisation_Code END AS [Sub ICB Code]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other ' ELSE c.Organisation_Name END AS [Sub ICB Name]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other' ELSE c.Region_Code END AS [Region Code]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other' ELSE c.Region_Name END AS [Region Name]
 
 INTO [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
 
@@ -137,13 +129,11 @@ FROM
 	--------------------------------------------------
 	LEFT JOIN [UKHD_ICD10].[Codes_And_Titles_And_MetaData] r5 ON a.[Der_Primary_Diagnosis_Code] = r5.[Alt_Code] AND r5.[Effective_To] IS NULL
 	--------------------------------------------------
-	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN a.[Commissioner_Code] LIKE '%00' THEN LEFT(a.[Commissioner_Code],3) ELSE a.[Commissioner_Code] END)= cc.Org_Code COLLATE database_default
-	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.[New_Code], (CASE WHEN a.[Commissioner_Code] LIKE '%00' THEN LEFT(a.[Commissioner_Code],3) ELSE a.[Commissioner_Code] END)) = ch.[Organisation_Code] COLLATE database_default AND ch.[Effective_To] IS NULL
+	LEFT JOIN Internal_Reference.ComCodeChanges cc ON a.Der_Commissioner_Code = cc.Org_Code 
+	LEFT JOIN Internal_Hierarchies.Commissioner_Hierarchies_TCUBE c ON COALESCE(cc.New_Code, a.Der_Commissioner_Code) = c.Organisation_Code AND c.Organisation_Name NOT LIKE '%REPORTING ENTITY%' AND c.STP_Name <> 'NonSTP (Wales Region)'
 	--------------------------------------------------
-	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON (CASE WHEN a.[Der_Provider_Code] LIKE '%00' THEN LEFT(a.[Der_Provider_Code],3) ELSE a.[Der_Provider_Code] END) = ps.[Prov_original] COLLATE database_default
-	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] ph ON COALESCE(ps.[Prov_Successor], (CASE WHEN a.[Der_Provider_Code] LIKE '%00' THEN LEFT(a.[Der_Provider_Code],3) ELSE a.[Der_Provider_Code] END)) = ph.[Organisation_Code] COLLATE database_default AND ph.[Effective_To] IS NULL
-	-- Lots of Commissioner and Provider codes in APCE/APCS are 5 character codes ending in 00 which will not match to a code so these are truncated to the 3 character code that will match with the reference tables
-	-- For Providers, 5 character codes are used for sites and 3 chracter codes are used for trusts. 5 character codes ending in 00 mean a generic site within a trust so the trust code needs to be used for it to match to the reference tables
+	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON  ps.Prov_original = a.Der_Provider_Code
+	LEFT JOIN Internal_Hierarchies.Provider_Hierarchies_TCUBE ph ON ph.Organisation_Code =  COALESCE(ps.Prov_successor, a.Der_Provider_Code) AND ph.[Effective_To] IS NULL
 
 WHERE
 	(a.[Admission_Date] BETWEEN @admission_period_start AND @admission_period_end OR a.[Discharge_Date] BETWEEN @admission_period_start AND @admission_period_end) 
@@ -151,11 +141,14 @@ WHERE
 	AND (a.Admission_Method LIKE '2%')	--Filters for emergency admissions only
 	AND a.[Patient_Classification] IN ('1','2','5')	-- Filters for: 1 = Ordinary admission, 2 = Day case admission, 5 = Mothers and babies using only delivery facilities  
 
+
 /* - APCS Base Table ----------------------------------------------------------------------------------------------------------------------------------------------------- */
+
 
 -- Record level values of APCS data for the 12 month period defined by @admission_period_start and @admission_period_end above (that are aggregated later) 
 
-IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_APCS_Base]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
+IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_APCS_Base]') IS NOT NULL 
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
 
 SELECT
 	b.[APCS_Ident]
@@ -196,642 +189,290 @@ SELECT
 	,CASE WHEN ph.[Organisation_Code] IS NOT NULL THEN ph.[Organisation_Code] ELSE 'Other' END AS [Provider_Code]
 	,CASE WHEN ph.[Organisation_Name] IS NOT NULL THEN ph.[Organisation_Name] ELSE 'Other' END AS [Provider Name]
 	,CASE WHEN ph.[Region_Name] IS NOT NULL THEN ph.[Region_Name] ELSE 'Other' END AS [Region_Name_Provider]
-	,CASE WHEN ch.[Organisation_Code] IS NOT NULL THEN ch.[Organisation_Code] ELSE 'Other' END AS [Sub ICB Code]
-	,CASE WHEN ch.[Organisation_Name] IS NOT NULL THEN ch.[Organisation_Name] ELSE 'Other' END AS [Sub ICB Name]
-	,CASE WHEN ch.[STP_Code] IS NOT NULL THEN ch.[STP_Code] ELSE 'Other' END AS [ICB Code]
-	,CASE WHEN ch.[STP_Name] IS NOT NULL THEN ch.[STP_Name] ELSE 'Other' END AS [ICB Name]
-	,CASE WHEN ch.[Region_Name] IS NOT NULL THEN ch.[Region_Name] ELSE 'Other' END AS [Region_Name_Commissioner]
-	,CASE WHEN ch.[Region_Code] IS NOT NULL THEN ch.[Region_Code] ELSE 'Other' END AS [Region_Code_Commissioner]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other ' ELSE c.Organisation_Code END AS [Sub ICB Code]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other ' ELSE c.Organisation_Name END AS [Sub ICB Name]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other' ELSE c.Region_Code END AS [Region Code]
+	,CASE WHEN c.Organisation_Code IS NULL THEN 'Other' ELSE c.Region_Name END AS [Region Name]
 
 INTO [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
 
 FROM 
 	[Reporting_MESH_APC].[APCS_Core_Monthly_Snapshot] b
 	--------------------------------------------------
-	LEFT JOIN [Internal_Reference].[ComCodeChanges] cc ON (CASE WHEN b.[Commissioner_Code] LIKE '%00' THEN LEFT(b.[Commissioner_Code],3) ELSE b.[Commissioner_Code] END) = cc.[Org_Code] COLLATE database_default
-	LEFT JOIN [Reporting].[Ref_ODS_Commissioner_Hierarchies_ICB] ch ON COALESCE(cc.[New_Code], (CASE WHEN b.[Commissioner_Code] LIKE '%00' THEN LEFT(b.[Commissioner_Code],3) ELSE b.[Commissioner_Code] END)) = ch.[Organisation_Code] COLLATE database_default AND ch.[Effective_To] IS NULL
+	LEFT JOIN Internal_Reference.ComCodeChanges cc ON b.Der_Commissioner_Code = cc.Org_Code 
+	LEFT JOIN Internal_Hierarchies.Commissioner_Hierarchies_TCUBE c ON COALESCE(cc.New_Code, b.Der_Commissioner_Code) = c.Organisation_Code AND c.Organisation_Name NOT LIKE '%REPORTING ENTITY%' AND c.STP_Name <> 'NonSTP (Wales Region)'
 	--------------------------------------------------
-	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON (CASE WHEN b.[Der_Provider_Code] LIKE '%00' THEN LEFT(b.[Der_Provider_Code],3) ELSE b.[Der_Provider_Code] END) = ps.[Prov_original] COLLATE database_default
-	LEFT JOIN [Reporting].[Ref_ODS_Provider_Hierarchies_ICB] ph ON COALESCE(ps.[Prov_Successor], (CASE WHEN b.[Der_Provider_Code] LIKE '%00' THEN LEFT(b.[Der_Provider_Code],3) ELSE b.[Der_Provider_Code] END)) = ph.[Organisation_Code] COLLATE database_default AND ph.[Effective_To] IS NULL
-	--Lots of Commissioner and Provider codes in APCE/APCS are 5 character codes ending in 00 which will not match to a code so these are truncated to the 3 character code that will match with the reference tables
-	--For Providers, 5 character codes are used for sites and 3 chracter codes are used for trusts. 5 character codes ending in 00 mean a generic site within a trust so the trust code needs to be used for it to match to the reference tables
+	LEFT JOIN [Internal_Reference].[Provider_Successor] ps ON  ps.Prov_original = b.Der_Provider_Code
+	LEFT JOIN Internal_Hierarchies.Provider_Hierarchies_TCUBE ph ON ph.Organisation_Code =  COALESCE(ps.Prov_successor, b.Der_Provider_Code) AND ph.[Effective_To] IS NULL
 
 WHERE 
 	([Admission_Date] BETWEEN @admission_period_start AND @admission_period_end) 
 	AND (Admission_Method LIKE '2%') -- emergency admissions only
 	AND [Patient_Classification] IN ('1','2','5') -- 1 = Ordinary admission, 2 = Day case admission, 5 = Mothers and babies using only delivery facilities  
 
-/* - Unsuppressed Aggregated Table ----------------------------------------------------------------------------------------------------------------------------- */
 
--- Aggregated values from the base APCE and base APCS tables at Provider/Sub-ICB/ICB/National levels for: 
--- Gender, Ethnicity, Admission Source, Discharge Destination, Length of Stay, Primary Diagnosis and Total.
 
--- National, Gender --------------------------------------------------------------------------------------------------------------------------------------------
+--- Map any old SICBs to new SICBs with relevant population weighting 
+IF OBJECT_ID ('tempdb..#SICB_Reference') IS NOT NULL
+DROP TABLE #SICB_Reference
 
-IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]') IS NOT NULL DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
+SELECT 
+	Sub_ICB_Location_ODS_Code AS SubICB_Code 
+	,Sub_ICB_Location_Name AS SubICB_Name 
+	,CAST(1 as float) AS PopWeight 
+	 ,Sub_ICB_Location_ODS_Code AS SubICB26_Code 
+	 ,Sub_ICB_Location_Name AS SubICB26_Name
+	,ICB_Code 
+	,Integrated_Care_Board_Name AS ICB_Name 
+	,Region_Code
+	,CASE 
+		WHEN Region_Name = 'EAST OF ENGLAND COMMISSIONING REGION' THEN 'East Of England'
+		WHEN Region_Name = 'LONDON COMMISSIONING REGION' THEN 'London'
+		WHEN Region_Name = 'MIDLANDS COMMISSIONING REGION' THEN 'Midlands'
+		WHEN Region_Name = 'NORTH EAST AND YORKSHIRE COMMISSIONING REGION' THEN 'North East And Yorkshire'
+		WHEN Region_Name = 'NORTH WEST COMMISSIONING REGION' THEN 'North West'
+		WHEN Region_Name = 'SOUTH EAST COMMISSIONING REGION' THEN 'South East'
+		WHEN Region_Name = 'SOUTH WEST COMMISSIONING REGION' THEN 'South West'
+	END AS Region_Name
 
-SELECT
+INTO #SICB_Reference 
 
+FROM Internal_Hierarchies.SICBL_Apr2026 
+
+INSERT INTO #SICB_Reference
+VALUES
+('D4U1Y','NHS FRIMLEY (D4U1Y)', 0.18204175443292, '92A','NHS SURREY AND SUSSEX ICB - 92A', 'S9B9J', 'NHS SURREY AND SUSSEX INTEGRATED CARE BOARD','Y59','South East'),
+('D4U1Y','NHS FRIMLEY (D4U1Y)', 0.229339252148803, 'D9Y0V','NHS HAMPSHIRE AND ISLE OF WIGHT ICB - D9Y0V', 'QRL', 'NHS HAMPSHIRE AND ISLE OF WIGHT INTEGRATED CARE BOARD','Y59','South East'),
+('D4U1Y','NHS FRIMLEY (D4U1Y)', 0.588618993418278,'U2G6B','NHS THAMES VALLEY ICB - U2G6B','S0E4D', 'NHS THAMES VALLEY INTEGRATED CARE BOARD','Y59','South East')
+
+
+SELECT *FROM #SICB_Reference 
+
+---- Aggregate to subICBs, weighting Frimley as needed 
+
+-- 1.1 APCE Admissions 
+
+IF OBJECT_ID ('[MHDInternal].[AggSICB_APCE_Base_Admissions]') IS NOT NULL 
+DROP TABLE [MHDInternal].[AggSICB_APCE_Base_Admissions]
+
+SELECT 
+	b.Admission_Month
+	,b.[Sub ICB Code]
+	,b.[Sub ICB Name]
+	,ISNULL(r.SubICB26_Code,'Other') AS SubICB26_Code
+	,ISNULL(r.SubICB26_Name,'Other') AS SubICB26_Name
+	,ISNULL(r.ICB_Code,'Other') AS ICB_Code
+	,ISNULL(r.ICB_Name,'Other') AS ICB_Name
+	,ISNULL(r.Region_Code,'Other') AS Region_Code
+	,ISNULL(r.Region_Name,'Other') AS Region_Name
+	,CASE 
+		WHEN GROUPING(Gender) = 0 THEN 'Gender' 
+		WHEN GROUPING(Ethnicity) = 0 THEN 'Ethnicity' 
+		WHEN GROUPING(Admission_Source) = 0 THEN 'Admission Source'
+		WHEN GROUPING([Primary Diagnosis]) = 0 THEN 'Primary Diagnosis'
+	ELSE 'Totals' 
+	END AS Category  
+	,CASE 
+		WHEN GROUPING(Gender) = 0 THEN Gender
+		WHEN GROUPING(Ethnicity) = 0 THEN Ethnicity
+		WHEN GROUPING(Admission_Source) = 0 THEN Admission_Source
+		WHEN GROUPING([Primary Diagnosis]) = 0 THEN [Primary Diagnosis]
+	ELSE 'Totals' 
+	END AS Variable  
+	,MAX(ISNULL(r.PopWeight,1)) AS PopWeight
+	,SUM(ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions
+	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 * ISNULL(r.PopWeight,1) ELSE 0 END) AS Num_Emergency_Admissions_65andOver
+	,SUM([Dementia] *  ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions_Dementia
+	,SUM(Delirium * ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions_Delirium
+	,SUM([MCI] * ISNULL(r.PopWeight,1)) AS [Num_Emergency_Admissions_MCI]
+	,CASE WHEN GROUPING([Primary Diagnosis]) = 0 THEN [Primary Diagnosis Chapter] ELSE NULL END AS [Primary Diagnosis Chapter]
+
+INTO [MHDInternal].[AggSICB_APCE_Base_Admissions]
+
+FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] b 
+
+LEFT JOIN #SICB_Reference r ON b.[Sub ICB Code]= r.SubICB_Code
+
+WHERE Der_Admission = 1 
+
+GROUP BY GROUPING SETS ( 
+	(b.Admission_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other')),
+	(Gender,b.Admission_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other')),
+	(Ethnicity,b.Admission_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other')),
+	(Admission_Source,b.Admission_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other')),
+	([Primary Diagnosis],[Primary Diagnosis Chapter],b.Admission_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other ') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other'))
+	)
+
+--- 1.2 APCE Base discharges 
+
+IF OBJECT_ID ('[MHDInternal].[AggSICB_APCE_Base_Discharges]') IS NOT NULL 
+DROP TABLE [MHDInternal].[AggSICB_APCE_Base_Discharges]
+
+SELECT 
+	b.Discharge_Month
+	,b.[Sub ICB Code]
+	,b.[Sub ICB Name]
+	,ISNULL(r.SubICB26_Code,'Other') AS SubICB26_Code
+	,ISNULL(r.SubICB26_Name,'Other') AS SubICB26_Name
+	,ISNULL(r.ICB_Code,'Other') AS ICB_Code
+	,ISNULL(r.ICB_Name,'Other') AS ICB_Name
+	,ISNULL(r.Region_Code,'Other') AS Region_Code
+	,ISNULL(r.Region_Name,'Other') AS Region_Name
+	,CASE 
+		WHEN GROUPING(Discharge_Destination) = 0 THEN 'Discharge Destination' 
+	ELSE 'Totals' 
+	END AS Category  
+	,CASE 
+		WHEN GROUPING(Discharge_Destination) = 0 THEN Discharge_Destination
+	ELSE 'Totals' 
+	END AS Variable  
+	,MAX(ISNULL(r.PopWeight,1)) AS PopWeight
+	,SUM(ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions
+	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 * ISNULL(r.PopWeight,1) ELSE 0 END) AS Num_Emergency_Admissions_65andOver
+	,SUM([Dementia] *  ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions_Dementia
+	,SUM(Delirium * ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions_Delirium
+	,SUM([MCI] * ISNULL(r.PopWeight,1)) AS [Num_Emergency_Admissions_MCI]
+
+INTO [MHDInternal].[AggSICB_APCE_Base_Discharges]
+
+FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] b 
+
+LEFT JOIN #SICB_Reference r ON b.[Sub ICB Code]= r.SubICB_Code
+
+WHERE Der_Discharge = 1 
+
+GROUP BY GROUPING SETS ( 
+	(Discharge_Destination,b.Discharge_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other'))
+	)
+
+-- 1.3 APCE Length of stay 
+
+IF OBJECT_ID ('[MHDInternal].[AggSICB_APCS_LOS]') IS NOT NULL 
+DROP TABLE [MHDInternal].[AggSICB_APCS_LOS]
+
+SELECT 
+	b.Admission_Month
+	,b.[Sub ICB Code]
+	,b.[Sub ICB Name]
+	,ISNULL(r.SubICB26_Code,'Other') AS SubICB26_Code
+	,ISNULL(r.SubICB26_Name,'Other') AS SubICB26_Name
+	,ISNULL(r.ICB_Code,'Other') AS ICB_Code
+	,ISNULL(r.ICB_Name,'Other') AS ICB_Name
+	,ISNULL(r.Region_Code,'Other') AS Region_Code
+	,ISNULL(r.Region_Name,'Other') AS Region_Name
+	,CASE 
+		WHEN GROUPING(LengthOfStay) = 0 THEN 'Length of Stay' 
+	ELSE 'Totals' 
+	END AS Category  
+	,CASE 
+		WHEN GROUPING(LengthOfStay) = 0 THEN LengthOfStay
+	ELSE 'Totals' 
+	END AS Variable  
+	,MAX(ISNULL(r.PopWeight,1)) AS PopWeight
+	,SUM(ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions
+	,SUM(CASE WHEN Age_At_Start_of_Spell_SUS >= 65 THEN 1 * ISNULL(r.PopWeight,1) ELSE 0 END) AS Num_Emergency_Admissions_65andOver
+	,SUM([Dementia] *  ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions_Dementia
+	,SUM(Delirium * ISNULL(r.PopWeight,1)) AS Num_Emergency_Admissions_Delirium
+	,SUM([MCI] * ISNULL(r.PopWeight,1)) AS [Num_Emergency_Admissions_MCI]
+
+INTO [MHDInternal].[AggSICB_APCS_LOS]
+
+FROM [MHDInternal].[TEMP_DEM_SUS_APCS_Base] b 
+
+LEFT JOIN #SICB_Reference r ON b.[Sub ICB Code]= r.SubICB_Code
+
+GROUP BY GROUPING SETS ( 
+	(LengthOfStay,b.Admission_Month,b.[Sub ICB Code],b.[Sub ICB Name],ISNULL(r.SubICB26_Code,'Other') ,ISNULL(r.SubICB26_Name,'Other') ,ISNULL(r.ICB_Code,'Other'),ISNULL(r.ICB_Name,'Other') ,ISNULL(r.Region_Code,'Other') ,ISNULL(r.Region_Name,'Other'))
+	)
+
+
+
+--- 2.0 Aggregate for final unsuppressed output table 
+-- 2.1 Aggregate base tables for provider and England level counts 
+-- 2.1.1 APCE Admissions 
+
+IF OBJECT_ID ('[MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]') IS NOT NULL 
+DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
+
+SELECT 
 	[Admission_Month] AS [Month]
-	,'National' AS [GroupType]
-	,CAST('All Regions' AS VARCHAR(MAX)) AS [RegionCode]
-	,CAST('England' AS VARCHAR(MAX)) AS [GeographyName]
-	,CAST('Gender' AS VARCHAR(MAX)) AS [Category]
-	,CAST(Gender AS VARCHAR(MAX)) AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,CAST(NULL AS VARCHAR(MAX)) AS [Primary Diagnosis Chapter]
-
-INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Gender]
-
--- National, Ethnicity --------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-	
-	[Admission_Month] AS [Month]
-	,'National' AS [GroupType]
-	,'All Regions' AS [RegionCode]
-	,'England'AS [GeographyName]
-	,'Ethnicity'AS [Category]
-	,[Ethnicity] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Ethnicity]
-
--- National, Admission Source -------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'National' AS [GroupType]
-	,'All Regions' AS [RegionCode]
-	,'England'AS [GeographyName]
-	,'Admission Source'AS [Category]
-	,[Admission_Source] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Admission_Source]
-
--- National, Discharge Destination --------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Discharge_Month] AS [Month]
-	,'National' AS [GroupType]
-	,'All Regions' AS [RegionCode]
-	,'England'AS [GeographyName]
-	,'Discharge Destination'AS [Category]
-	,[Discharge_Destination] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Discharge=1
-
-GROUP BY [Discharge_Month], [Discharge_Destination]
-
--- National, Length of Stay  -------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-	
-	[Admission_Month] AS [Month]
-	,'National' AS [GroupType]
-	,'All Regions' AS [RegionCode]
-	,'England'AS [GeographyName]
-	,'Length of Stay'AS [Category]
-	,[LengthOfStay] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_At_Start_of_Spell_SUS] >= 65 THEN 1 ELSE 0 END) AS Num_Emergency_Admissions_65andOver
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCS_Base] a
-
-GROUP BY [Admission_Month], [LengthOfStay]
-
--- National, Total ------------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-	
-	[Admission_Month] AS [Month]
-	,'National' AS [GroupType]
-	,'All Regions' AS [RegionCode]
-	,'England' AS [GeographyName]
-	,'Total'AS [Category]
-	,'Total' AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month]
-
--- National, Primary Diagnosis ------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'National' AS [GroupType]
-	,'All Regions' AS [RegionCode]
-	,'England'AS [GeographyName]
-	,'Primary Diagnosis'AS [Category]
-	,[Primary Diagnosis] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,[Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Primary Diagnosis], [Primary Diagnosis Chapter]
-
--- ICB, Gender ----------------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-	
-	[Admission_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Gender' AS [Category]
-	,[Gender] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [ICB Name], [Gender]
-
--- ICB, Ethnicity -------------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Ethnicity' AS [Category]
-	,[Ethnicity] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [ICB Name], [Ethnicity]
-
--- ICB, Admission Source ------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Admission Source' AS [Category]
-	,[Admission_Source] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [ICB Name], [Admission_Source]
-
--- ICB, Discharge Destination -------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Discharge_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,Region_Name_Commissioner AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Discharge Destination' AS [Category]
-	,[Discharge_Destination] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Discharge=1
-
-GROUP BY [Discharge_Month], [Region_Name_Commissioner], [ICB Name], [Discharge_Destination]
-
--- ICB, Length of Stay --------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Length of Stay' AS [Category]
-	,[LengthOfStay] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_At_Start_of_Spell_SUS] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCS_Base] a
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [ICB Name], [LengthOfStay]
-
--- ICB, Total -----------------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-	
-	[Admission_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Total' AS [Category]
-	,'Total' AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [ICB Name]
-
--- ICB, Primary Diagnosis -----------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[ICB Name] AS [GeographyName]
-	,'Primary Diagnosis' AS [Category]
-	,[Primary Diagnosis] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,[Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [ICB Name], [Primary Diagnosis], [Primary Diagnosis Chapter]
-
--- Sub-ICB, Gender ------------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Gender' AS [Category]
-	,[Gender] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [Sub ICB Name], [Gender]
-
--- Sub-ICB, Ethnicity ---------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Ethnicity' AS [Category]
-	,[Ethnicity] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [Sub ICB Name], [Ethnicity]
-
--- Sub-ICB, Admission Source --------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Admission Source' AS [Category]
-	,[Admission_Source] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [Sub ICB Name], [Admission_Source]
-
--- Sub-ICB, Discharge Destination ---------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Discharge_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Discharge Destination' AS [Category]
-	,[Discharge_Destination] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Discharge=1
-
-GROUP BY [Discharge_Month], [Region_Name_Commissioner], [Sub ICB Name], [Discharge_Destination]
-
--- Sub-ICB, Length of Stay ----------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Length of Stay' AS [Category]
-	,[LengthOfStay] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_At_Start_of_Spell_SUS] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCS_Base] a
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [Sub ICB Name], [LengthOfStay]
-
--- Sub-ICB, Total -------------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Total' AS [Category]
-	,'Total' AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [Sub ICB Name]
-
--- Sub-ICB, Primary Diagnosis -------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Sub ICB' AS [GroupType]
-	,[Region_Name_Commissioner] AS [RegionCode]
-	,[Sub ICB Name] AS [GeographyName]
-	,'Primary Diagnosis' AS [Category]
-	,[Primary Diagnosis] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,[Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Commissioner], [Sub ICB Name], [Primary Diagnosis], [Primary Diagnosis Chapter]
-
--- Provider, Gender -----------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,[Region_Name_Provider] AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
-	,'Gender'AS [Category]
-	,[Gender] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Provider], [Provider Name], [Gender]
-
--- Provider, Ethnicity --------------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,[Region_Name_Provider] AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
-	,'Ethnicity'AS [Category]
-	,[Ethnicity] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Provider], [Provider Name], [Ethnicity]
-
--- Provider, Admission Source -------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,[Region_Name_Provider] AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
-	,'Admission Source'AS [Category]
-	,[Admission_Source] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Provider], [Provider Name], [Admission_Source]
-
--- Provider, Discharge Destination --------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Discharge_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,Region_Name_Provider AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN 'Provider'
+	ELSE 'National' 
+	END AS [GroupType]
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN Region_Name_Provider
+	ELSE 'All Regions' 
+	END AS RegionCode 
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN [Provider Name] 
+	ELSE 'England'
+	END AS GeographyName 
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN Provider_Code 
+	ELSE 'England'
+	END AS GeographyCode
+	,CASE
+		WHEN GROUPING(Gender)=0 THEN CAST('Gender' AS VARCHAR(MAX))
+		WHEN GROUPING(Ethnicity)=0 THEN CAST('Ethnicity' AS VARCHAR(MAX))
+		WHEN GROUPING(Admission_Source)=0 THEN CAST('Admission Source' AS VARCHAR(MAX))
+		WHEN GROUPING([Primary Diagnosis])=0 THEN CAST('Primary Diagnosis' AS VARCHAR(MAX))
+	ELSE CAST('Total' AS VARCHAR(MAX))
+	END AS [Category]
+	,CASE
+		WHEN GROUPING(Gender)=0 THEN CAST(Gender AS VARCHAR(MAX))
+		WHEN GROUPING(Ethnicity)=0 THEN  CAST(Ethnicity AS VARCHAR(MAX))
+		WHEN GROUPING(Admission_Source)=0 THEN  CAST(Admission_Source AS VARCHAR(MAX))
+		WHEN GROUPING([Primary Diagnosis])=0 THEN CAST([Primary Diagnosis] AS VARCHAR(MAX))
+	ELSE  CAST('Total' AS VARCHAR(MAX))
+	END AS [Variable]
+	,CAST(COUNT(*) AS FLOAT) AS [Num_Emergency_Admissions]
+	,CAST(SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS FLOAT) AS [Num_Emergency_Admissions_65andOver]
+	,CAST(SUM([Dementia]) AS FLOAT) AS [Num_Emergency_Admissions_Dementia]
+	,CAST(SUM([Delirium]) AS FLOAT) AS [Num_Emergency_Admissions_Delirium]
+	,CAST(SUM([MCI]) AS FLOAT) AS [Num_Emergency_Admissions_MCI]
+	,CASE WHEN GROUPING([Primary Diagnosis]) = 0 THEN [Primary Diagnosis Chapter] ELSE NULL END AS [Primary Diagnosis Chapter]
+
+INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
+
+FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] b 
+
+WHERE Der_Admission = 1  
+
+GROUP BY GROUPING SETS ( 
+	(Admission_Month), -- England, totals 
+	(Admission_Month, Gender), -- England, gender 
+	(Admission_Month, Ethnicity), -- England, ethnicity
+	(Admission_Month, Admission_Source), -- England, admission source	
+	(Admission_Month, [Primary Diagnosis], [Primary Diagnosis Chapter]), -- England, diagnosis
+	(Admission_Month, [Provider Name], Region_Name_Provider, Provider_Code), -- provider, totals 
+	(Admission_Month, [Provider Name], Region_Name_Provider, Provider_Code,Gender), -- provider, gender 
+	(Admission_Month, [Provider Name], Region_Name_Provider, Provider_Code, Ethnicity), -- provider, ethnicity
+	(Admission_Month, [Provider Name], Region_Name_Provider, Provider_Code, Admission_Source), -- provider, admission source	
+	(Admission_Month, [Provider Name], Region_Name_Provider, Provider_Code, [Primary Diagnosis], [Primary Diagnosis Chapter]) -- provider, diagnosis
+	) 
+
+-- 2.1.1 APCE Discharges  
+INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
+
+SELECT 
+	Discharge_Month AS [Month]
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN 'Provider'
+	ELSE 'National' 
+	END AS [GroupType]
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN Region_Name_Provider
+	ELSE 'All Regions' 
+	END AS RegionCode 
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN [Provider Name] 
+	ELSE 'England'
+	END AS GeographyName 
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN Provider_Code 
+	ELSE 'England'
+	END AS GeographyCode
 	,'Discharge Destination' AS [Category]
 	,Discharge_Destination AS [Variable]
 	,COUNT(*) AS [Num_Emergency_Admissions]
@@ -841,93 +482,169 @@ SELECT
 	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
 	,NULL AS [Primary Diagnosis Chapter]
 
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
+FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] b 
 
-WHERE Der_Discharge=1
+WHERE Der_Discharge = 1  
 
-GROUP BY [Discharge_Month], [Region_Name_Provider], [Provider Name], [Discharge_Destination]
+GROUP BY GROUPING SETS ( 
+	(Discharge_Month, Discharge_Destination), -- England, discharge destination 
+	(Discharge_Month, [Provider Name], Provider_Code, Region_Name_Provider, Discharge_Destination) -- provider, discharge destination 
+	) 
 
--- Provider, Length of Stay ---------------------------------------------------------------------------------------
+-- 2.1.1 APCS Length of stay   
+INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
 
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,[Region_Name_Provider] AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
-	,'Length of Stay'AS [Category]
-	,[LengthOfStay] AS [Variable]
+SELECT 
+	Admission_Month AS [Month]
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN 'Provider'
+	ELSE 'National' 
+	END AS [GroupType]
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN Region_Name_Provider
+	ELSE 'All regions' 
+	END AS RegionCode 
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN [Provider Name] 
+	ELSE 'England'
+	END AS GeographyName 
+	,CASE 
+		WHEN GROUPING([Provider Name])=0 THEN Provider_Code 
+	ELSE 'England'
+	END AS GeographyCode
+	,'Length of Stay' AS [Category]
+	,LengthOfStay AS [Variable]
 	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_At_Start_of_Spell_SUS] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
+	,SUM(CASE WHEN Age_At_Start_of_Spell_SUS >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
 	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
 	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
 	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
 	,NULL AS [Primary Diagnosis Chapter]
 
-FROM [MHDInternal].[TEMP_DEM_SUS_APCS_Base] a
+FROM [MHDInternal].[TEMP_DEM_SUS_APCS_Base] b 
 
-GROUP BY [Admission_Month], [Region_Name_Provider], [Provider Name], [LengthOfStay]
+GROUP BY GROUPING SETS ( 
+	(Admission_Month, LengthOfStay), -- England, LOS 
+	(Admission_Month, [Provider Name], Provider_Code, Region_Name_Provider, LengthOfStay) -- provider, LOS 
+	) 
 
--- Provider, Total ------------------------------------------------------------------------------------------------
+--- 3.0 Aggregate ICB and Sub-ICB from staging table 
+--- 3.1 APCE Admissions 
 
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
+INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
 
-SELECT
-
+SELECT 
 	[Admission_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,[Region_Name_Provider] AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
-	,'Total'AS [Category]
-	,'Total' AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
-	,NULL AS [Primary Diagnosis Chapter]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
-
-WHERE Der_Admission=1
-
-GROUP BY [Admission_Month], [Region_Name_Provider], [Provider Name]
-
--- Provider, Primary Diagnosis ------------------------------------------------------------------------------------
-
-INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-SELECT
-
-	[Admission_Month] AS [Month]
-	,'Provider' AS [GroupType]
-	,[Region_Name_Provider] AS [RegionCode]
-	,[Provider Name] AS [GeographyName]
-	,'Primary Diagnosis'AS [Category]
-	,[Primary Diagnosis] AS [Variable]
-	,COUNT(*) AS [Num_Emergency_Admissions]
-	,SUM(CASE WHEN [Age_on_Admission] >= 65 THEN 1 ELSE 0 END) AS [Num_Emergency_Admissions_65andOver]
-	,SUM([Dementia]) AS [Num_Emergency_Admissions_Dementia]
-	,SUM([Delirium]) AS [Num_Emergency_Admissions_Delirium]
-	,SUM([MCI]) AS [Num_Emergency_Admissions_MCI]
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN 'Sub ICB' 
+		WHEN GROUPING([ICB_Name])=0 THEN 'ICB' 
+	END AS GroupType 
+	,Region_Name AS RegionCode 
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN SubICB26_Name
+		WHEN GROUPING([ICB_Name])=0 THEN ICB_Name
+	END AS GeographyName 
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN SubICB26_Code
+		WHEN GROUPING([ICB_Name])=0 THEN ICB_Code
+	END AS GeographyCode
+	,Category
+	,Variable
+	,SUM([Num_Emergency_Admissions]) AS [Num_Emergency_Admissions]
+	,SUM([Num_Emergency_Admissions_65andOver]) AS [Num_Emergency_Admissions_65andOver]
+	,SUM([Num_Emergency_Admissions_Dementia]) AS [Num_Emergency_Admissions_Dementia]
+	,SUM([Num_Emergency_Admissions_Delirium]) AS [Num_Emergency_Admissions_Delirium]
+	,SUM([Num_Emergency_Admissions_MCI]) AS [Num_Emergency_Admissions_MCI]
 	,[Primary Diagnosis Chapter]
 
-FROM [MHDInternal].[TEMP_DEM_SUS_APCE_Base] a
+FROM [MHDInternal].[AggSICB_APCE_Base_Admissions] b 
 
-WHERE Der_Admission=1
+GROUP BY GROUPING SETS ( 
+	(Admission_Month, Category, Variable, [Primary Diagnosis Chapter], Region_Name, SubICB26_Code, [SubICB26_Name]), -- all sub ICBs 
+	(Admission_Month, Category, Variable, [Primary Diagnosis Chapter], Region_Name, ICB_Code,ICB_Name) -- all ICBs
+	)
 
-GROUP BY [Admission_Month], [Region_Name_Provider], [Provider Name], [Primary Diagnosis], [Primary Diagnosis Chapter]
 
-/* - Suppressed Output (metrics less than 7) -------------------------------------------------------------------------------------------------- */
 
--- IF OBJECT_ID ('[MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]') IS NOT NULL DROP TABLE [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
+-- 3.2 APCE Discharges 
 
-INSERT INTO [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
+INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
+
+SELECT 
+	Discharge_Month AS [Month]
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN 'Sub ICB' 
+		WHEN GROUPING([ICB_Name])=0 THEN 'ICB' 
+	END AS GroupType 
+	,Region_Name AS RegionCode 
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN SubICB26_Name
+		WHEN GROUPING([ICB_Name])=0 THEN ICB_Name
+	END AS GeographyName 
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN SubICB26_Code
+		WHEN GROUPING([ICB_Name])=0 THEN ICB_Code
+	END AS GeographyCode
+	,Category
+	,Variable
+	,SUM([Num_Emergency_Admissions]) AS [Num_Emergency_Admissions]
+	,SUM([Num_Emergency_Admissions_65andOver]) AS [Num_Emergency_Admissions_65andOver]
+	,SUM([Num_Emergency_Admissions_Dementia]) AS [Num_Emergency_Admissions_Dementia]
+	,SUM([Num_Emergency_Admissions_Delirium]) AS [Num_Emergency_Admissions_Delirium]
+	,SUM([Num_Emergency_Admissions_MCI]) AS [Num_Emergency_Admissions_MCI]
+	,NULL [Primary Diagnosis Chapter]
+
+FROM [MHDInternal].[AggSICB_APCE_Base_Discharges] b 
+
+GROUP BY GROUPING SETS ( 
+	(Discharge_Month, Category, Variable , Region_Name, SubICB26_Code, [SubICB26_Name]), -- all sub ICBs 
+	(Discharge_Month, Category, Variable, Region_Name, ICB_Code,ICB_Name) -- all ICBs
+	)
+
+
+-- 3.3 APCS Length of Stay  
+
+INSERT INTO [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
+
+SELECT 
+	Admission_Month AS [Month]
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN 'Sub ICB' 
+		WHEN GROUPING([ICB_Name])=0 THEN 'ICB' 
+	END AS GroupType 
+	,Region_Name AS RegionCode 
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN SubICB26_Name
+		WHEN GROUPING([ICB_Name])=0 THEN ICB_Name
+	END AS GeographyName 
+	,CASE 
+		WHEN GROUPING([SubICB26_Name])=0 THEN SubICB26_Code
+		WHEN GROUPING([ICB_Name])=0 THEN ICB_Code
+	END AS GeographyCode
+	,Category
+	,Variable
+	,SUM([Num_Emergency_Admissions]) AS [Num_Emergency_Admissions]
+	,SUM([Num_Emergency_Admissions_65andOver]) AS [Num_Emergency_Admissions_65andOver]
+	,SUM([Num_Emergency_Admissions_Dementia]) AS [Num_Emergency_Admissions_Dementia]
+	,SUM([Num_Emergency_Admissions_Delirium]) AS [Num_Emergency_Admissions_Delirium]
+	,SUM([Num_Emergency_Admissions_MCI]) AS [Num_Emergency_Admissions_MCI]
+	,NULL [Primary Diagnosis Chapter]
+
+FROM [MHDInternal].[AggSICB_APCS_LOS] b 
+
+GROUP BY GROUPING SETS ( 
+	(Admission_Month, Category, Variable , Region_Name, SubICB26_Code,[SubICB26_Name]), -- all sub ICBs 
+	(Admission_Month, Category, Variable, Region_Name, ICB_Code, ICB_Name) -- all ICBs
+	)
+
+
+
+
+--- Suppress output and put into backing table 
+
+INSERT INTO [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions_New]
 
 SELECT
-	
 	[Month]
 	,[GroupType]
 	,[RegionCode]
@@ -942,16 +659,4 @@ SELECT
 	,[Primary Diagnosis Chapter]
 	,GETDATE() AS [SnapshotDate]
 	
---INTO [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]
-
-FROM [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
-
-GO -- End of Step 2--------------------------------------------------------------------------------------------------------------------------------------------------------------
-
-PRINT CHAR(13) + 'Updated - [MHDInternal].[DASHBOARD_DEM_SUS_Emergency_Admissions]'
-
-/* - Step 3 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------*/
-
-DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCE_Base]
-DROP TABLE [MHDInternal].[TEMP_DEM_SUS_APCS_Base]
-DROP TABLE [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed]
+FROM [MHDInternal].[TEMP_DEM_SUS_Admissions_Unsuppressed_New]
